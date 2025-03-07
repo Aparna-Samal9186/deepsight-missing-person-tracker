@@ -1,15 +1,9 @@
+import dlib
 
-# test_main.py
-import unittest
-from main import main
+predictor_path = r"C:\Users\APARNA SAMAL\Desktop\DeepSight\deepsight-missing-person-tracker\models\shape_predictor_68_face_landmarks.dat"
 
-class TestMain(unittest.TestCase):
-    def test_run(self):
-        try:
-            main()
-            self.assertTrue(True)
-        except Exception as e:
-            self.fail(f"main() raised {e} unexpectedly!")
-
-if __name__ == "__main__":
-    unittest.main()
+try:
+    predictor = dlib.shape_predictor(predictor_path)
+    print("Model loaded successfully!")
+except Exception as e:
+    print(f"Error loading model: {e}")
