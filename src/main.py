@@ -22,9 +22,9 @@ else:
         if embeddings:
             print(f"✅ Successfully extracted embeddings for {len(embeddings)} faces.")
 
-            # Show detected faces separately
+            # Show detected faces separately and print embeddings
             for i, face in enumerate(faces):
-                print(f"👤 Face {i+1} Embedding: {embeddings[i][:5]}... (truncated for display)")
+                print(f"🟣 Face {i+1} Embedding: {embeddings[i][:5]}... (truncated for display)")
                 cv2.imshow(f"Face {i+1}", face)
 
             # Show image with bounding boxes
