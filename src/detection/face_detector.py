@@ -7,40 +7,51 @@ detector = MTCNN()
 
 def detect_faces(image_path):
     """
-    Detects faces in an image using MTCNN.
-    Draws bounding boxes and facial landmarks.
+    Detects multiple faces in an image, returns the image with bounding boxes and cropped face regions.
 
     Args:
     - image_path (str): Path to the input image.
 
     Returns:
-    - image (numpy array): Image with detected faces.
-    - num_faces (int): Number of faces detected.
+    - image_with_boxes (numpy array): Image with bounding boxes drawn.
+    - faces (list of numpy arrays): List of cropped face images.
     """
     # Load image
     image = cv2.imread(image_path)
-    
+
     if image is None:
         print("❌ Error: Unable to load image!")
-        return None, 0
+        return None, []
 
     # Convert image to RGB (MTCNN expects RGB)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     # Detect faces
     detections = detector.detect_faces(image_rgb)
-    num_faces = len(detections)
 
-    # Draw bounding boxes and landmarks
-    for detection in detections:
+    faces = []
+
+    for i, detection in enumerate(detections):
         x, y, width, height = detection['box']
-        keypoints = detection['keypoints']
 
-        # Draw rectangle around face
+        # Ensure valid bounding box dimensions
+        x, y = max(0, x), max(0, y)
+        width, height = max(1, width), max(1, height)
+
+        # Extract face region
+        face_rgb = image_rgb[y:y + height, x:x + width]
+
+        # Convert face back to BGR (DeepFace expects BGR)
+        face_bgr = cv2.cvtColor(face_rgb, cv2.COLOR_RGB2BGR)
+
+        # Resize face to match model input size
+        face_bgr = cv2.resize(face_bgr, (160, 160))
+
+        faces.append(face_bgr)
+
+        # Draw bounding box on original image
         cv2.rectangle(image, (x, y), (x + width, y + height), (0, 255, 0), 3)
+        cv2.putText(image, f"Face {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-        # Draw key points (eyes, nose, mouth)
-        for point in keypoints.values():
-            cv2.circle(image, point, 3, (0, 0, 255), -1)
-
-    return image, num_faces
+    print(f"✅ Detected {len(faces)} faces.")
+    return image, faces
