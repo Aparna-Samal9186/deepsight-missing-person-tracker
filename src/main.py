@@ -12,13 +12,26 @@ if not os.path.exists(image_path):
 else:
     print(f"✅ Using image: {image_path}")
 
-    # Detect faces 
-    faces = detect_faces(image_path)
+    # Detect faces and get image with bounding boxes
+    image_with_faces, faces = detect_faces(image_path)
     
-    # extract embeddings
-    embeddings = extract_embeddings(faces)
+    if faces:
+        # Extract embeddings
+        embeddings = extract_embeddings(faces)
 
-    if embeddings:
-        print(f"✅ Successfully extracted embeddings for {len(embeddings)} faces.")
+        if embeddings:
+            print(f"✅ Successfully extracted embeddings for {len(embeddings)} faces.")
+
+            # Show detected faces separately
+            for i, face in enumerate(faces):
+                print(f"👤 Face {i+1} Embedding: {embeddings[i][:5]}... (truncated for display)")
+                cv2.imshow(f"Face {i+1}", face)
+
+            # Show image with bounding boxes
+            cv2.imshow("Detected Faces", image_with_faces)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+        else:
+            print("⚠️ No embeddings extracted.")
     else:
-        print("⚠️ No embeddings extracted.")
+        print("⚠️ No faces detected.")
