@@ -4,23 +4,54 @@ import datetime
 # Connect to MongoDB
 client = MongoClient("mongodb://localhost:27017/")
 db = client["deepsight_db"]
-collection = db["face_embeddings"]
 
-def store_embedding(face_id, name, embedding, image_path):
-    """Stores a face embedding in MongoDB."""
+# Collections
+registered_faces = db["registered_faces"]  # Known individuals
+missing_persons = db["missing_persons"]  # Missing persons
+
+def store_embedding(face_id, name, embedding, image_path, bbox, collection_name="registered_faces"):
+    """
+    Stores a face embedding along with bounding box in MongoDB.
+    
+    Args:
+    - face_id (str): Unique identifier for the face.
+    - name (str): Name of the person (or "Unknown" for missing persons).
+    - embedding (list): Face embedding vector.
+    - image_path (str): Path to the image.
+    - bbox (tuple): Bounding box coordinates (x, y, w, h).
+    - collection_name (str): Collection to store data in ('registered_faces' or 'missing_persons').
+
+    Returns:
+    - str: Inserted document ID.
+    """
+    collection = registered_faces if collection_name == "registered_faces" else missing_persons
+
     document = {
         "_id": face_id,
         "name": name,
-        "embedding": embedding,  # Already a list in main.py
+        "embedding": embedding,
         "image_path": image_path,
+        "bbox": bbox,  # Store bounding box
         "timestamp": datetime.datetime.utcnow()
     }
+
     try:
         collection.insert_one(document)
-        print(f"✅ Stored embedding for {name} ({face_id})")
+        print(f"✅ Stored embedding for {name} in {collection_name} with bbox {bbox}.")
+        return str(document["_id"])
     except Exception as e:
         print(f"⚠️ Error storing embedding: {e}")
+        return None
 
-def get_all_embeddings():
-    """Retrieves all face embeddings from MongoDB."""
-    return list(collection.find({}, {"_id": 1, "name": 1, "embedding": 1}))
+def get_all_embeddings(collection_name="registered_faces"):
+    """
+    Retrieves all face embeddings from the specified collection.
+    
+    Args:
+    - collection_name (str): 'registered_faces' or 'missing_persons'
+
+    Returns:
+    - list: Retrieved embeddings.
+    """
+    collection = registered_faces if collection_name == "registered_faces" else missing_persons
+    return list(collection.find({}, {"_id": 1, "name": 1, "embedding": 1, "image_path": 1}))
