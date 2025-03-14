@@ -13,12 +13,15 @@ def identify_missing_person(image_path):
         print("⚠️ No faces detected.")
         return
     
-    embeddings = extract_embeddings(faces)
+    embeddings = extract_embeddings(faces)    # Extract embeddings from detected faces in missing person image
     if not embeddings:
         print("⚠️ No embeddings extracted.")
         return
     
     registered_faces = get_all_embeddings("registered_faces")
+    
+    print('embeddings:',embeddings)   
+    print('registered_faces:',registered_faces)
     
     for i, embedding in enumerate(embeddings):
         face_id = f"face_{i+1}"
@@ -53,5 +56,5 @@ def identify_missing_person(image_path):
     cv2.destroyAllWindows()
 
 # Run the identification
-missing_person_image = r"C:\Users\APARNA SAMAL\Desktop\DeepSight\deepsight-missing-person-tracker\data\test_image.jpg"
-identify_missing_person(missing_person_image)
+# missing_person_image = r"C:\Users\APARNA SAMAL\Desktop\DeepSight\deepsight-missing-person-tracker\data\test_image.jpg"
+# identify_missing_person(missing_person_image)

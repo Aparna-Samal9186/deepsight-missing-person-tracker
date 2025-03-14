@@ -9,16 +9,15 @@ db = client["deepsight_db"]
 registered_faces = db["registered_faces"]  # Known individuals
 missing_persons = db["missing_persons"]  # Missing persons
 
-def store_embedding(face_id, name, embedding, image_path, bbox, collection_name="registered_faces"):
+def store_embedding(face_id, name, embedding, image_path, collection_name="registered_faces"):
     """
-    Stores a face embedding along with bounding box in MongoDB.
+    Stores a face embedding in MongoDB.
     
     Args:
     - face_id (str): Unique identifier for the face.
     - name (str): Name of the person (or "Unknown" for missing persons).
     - embedding (list): Face embedding vector.
     - image_path (str): Path to the image.
-    - bbox (tuple): Bounding box coordinates (x, y, w, h).
     - collection_name (str): Collection to store data in ('registered_faces' or 'missing_persons').
 
     Returns:
@@ -31,13 +30,12 @@ def store_embedding(face_id, name, embedding, image_path, bbox, collection_name=
         "name": name,
         "embedding": embedding,
         "image_path": image_path,
-        "bbox": bbox,  # Store bounding box
         "timestamp": datetime.datetime.utcnow()
     }
 
     try:
         collection.insert_one(document)
-        print(f"✅ Stored embedding for {name} in {collection_name} with bbox {bbox}.")
+        print(f"✅ Stored embedding for {name} in {collection_name}.")
         return str(document["_id"])
     except Exception as e:
         print(f"⚠️ Error storing embedding: {e}")
