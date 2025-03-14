@@ -1,23 +1,29 @@
 import cv2
 import os
 from detection.face_detector import detect_faces 
-from recognition.face_recognizer import extract_embeddings, compare_embeddings
-from recognition.db_manager import store_embedding
+from recognition.face_recognizer import extract_embeddings
+from recognition.db_manager import store_embedding, get_next_face_id
 from recognition.add_missing_person import add_missing_person
 from recognition.identify_missing_person import identify_missing_person
 
 def store_faces(image_path):
     """Detects faces and stores embeddings in the database."""
     image_with_faces, faces = detect_faces(image_path)
-    
+
     if faces:
         embeddings = extract_embeddings(faces)
         if embeddings:
             print(f"✅ Successfully extracted embeddings for {len(embeddings)} faces.")
             for i, (face, embedding) in enumerate(zip(faces, embeddings)):
-                face_id = f"registered_face_{i+1}"
-                store_embedding(face_id, "Unknown", embedding, image_path, collection_name="registered_faces")
-                cv2.imshow(f"Face {i+1}", face)
+                face_id = get_next_face_id()  # Generate unique face ID
+
+                # Ask for a name, default to "Unknown" if not provided
+                name = input(f"Enter name for Face {i+1} (or press Enter to keep it Unknown): ").strip()
+                if not name:
+                    name = "Unknown"
+
+                store_embedding(face_id, name, embedding, image_path, collection_name="registered_faces")
+                cv2.imshow(f"Face {i+1} - {name}", face)
             cv2.imshow("Detected Faces", image_with_faces)
             cv2.waitKey(0)
             cv2.destroyAllWindows()

@@ -9,6 +9,27 @@ db = client["deepsight_db"]
 registered_faces = db["registered_faces"]  # Known individuals
 missing_persons = db["missing_persons"]  # Missing persons
 
+def get_next_face_id():
+    """
+    Retrieves the next available face ID for registered faces.
+    
+    Returns:
+    - str: New unique face ID.
+    """
+    last_face = registered_faces.find_one(
+        {}, 
+        sort=[("_id", -1)]
+    )
+
+    if last_face and last_face["_id"].startswith("registered_face_"):
+        last_id = int(last_face["_id"].split("_")[-1])
+        new_id = last_id + 1
+    else:
+        new_id = 1
+
+    return f"registered_face_{new_id}"
+
+
 def store_embedding(face_id, name, embedding, image_path, collection_name="registered_faces"):
     """
     Stores a face embedding in MongoDB.

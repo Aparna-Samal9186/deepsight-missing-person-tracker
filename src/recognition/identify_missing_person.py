@@ -20,8 +20,8 @@ def identify_missing_person(image_path):
     
     registered_faces = get_all_embeddings("registered_faces")
     
-    print('embeddings:',embeddings)   
-    print('registered_faces:',registered_faces)
+    # print('embeddings:',embeddings)   
+    # print('registered_faces:',registered_faces)
     
     for i, embedding in enumerate(embeddings):
         face_id = f"face_{i+1}"
@@ -30,8 +30,11 @@ def identify_missing_person(image_path):
         matches = compare_embeddings(embedding, collection_name="registered_faces")
         
         if matches:
-            matched_name, similarity = matches[0]
+            matched_entry = matches[0]  # Get the top match
+            matched_name, similarity = matched_entry
+
             print(f"🚨 Match Found! {face_id} matches registered person: {matched_name} (Similarity: {similarity:.2f})")
+            print(f"🔍 Full Matched Object: {matched_entry}")  # Print the entire matched object for debugging
             
             # Retrieve and show the registered person's image with bounding box
             for entry in registered_faces:

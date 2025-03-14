@@ -33,6 +33,9 @@ def compare_embeddings(new_embedding, threshold=0.7, collection_name="registered
     Compares a new embedding against stored embeddings in MongoDB.
     """
     stored_faces = get_all_embeddings(collection_name)
+
+    # print('new_embedding inside face_recognizer campare_embeddings:',new_embedding)
+    # print('stored_faces:',stored_faces)
     matches = []
     
     for entry in stored_faces:
