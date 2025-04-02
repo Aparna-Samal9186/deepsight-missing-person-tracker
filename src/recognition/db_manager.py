@@ -13,9 +13,6 @@ db = client["deepsight_db"]
 registered_faces = db["registered_faces"]
 missing_persons = db["missing_persons"]
 
-for doc in missing_persons.find():
-    print(doc)
-
 def convert_image_to_base64(image_np):
     """Converts a NumPy image array to Base64 string."""
     _, buffer = cv2.imencode(".jpg", image_np)
@@ -101,7 +98,7 @@ def find_closest_match(embedding, collection_name="registered_faces"):
     all_embeddings = get_all_embeddings(collection_name)
 
     if not all_embeddings:
-        return None
+        return None  # Return None if the collection is empty
 
     closest_match = None
     highest_similarity = -1  # Cosine similarity ranges from -1 to 1
@@ -114,4 +111,7 @@ def find_closest_match(embedding, collection_name="registered_faces"):
                 highest_similarity = similarity
                 closest_match = entry
 
-    return closest_match if highest_similarity > 0.8 else None  # 0.8 threshold for match
+    if highest_similarity > 0.8:
+        return closest_match
+    else:
+        return None  # Return None if no match is found

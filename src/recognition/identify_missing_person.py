@@ -1,63 +1,43 @@
-import cv2
-import os
-from detection.face_detector import detect_faces
-from recognition.face_recognizer import extract_embeddings, compare_embeddings
-from recognition.db_manager import get_all_embeddings
+# identify_missing_person.py
 
-def identify_missing_person(image_path):
-    """Identifies missing persons by comparing detected faces with registered faces."""
-    print(f"✅ Processing image: {image_path}")
-    
-    image_with_faces, faces = detect_faces(image_path)
-    if not faces:
-        print("⚠️ No faces detected.")
-        return
-    
-    embeddings = extract_embeddings(faces)    # Extract embeddings from detected faces in missing person image
-    if not embeddings:
-        print("⚠️ No embeddings extracted.")
-        return
-    
-    registered_faces = get_all_embeddings("registered_faces")
-    
-    # print('embeddings:',embeddings)   
-    # print('registered_faces:',registered_faces)
-    
-    for i, embedding in enumerate(embeddings):
-        face_id = f"face_{i+1}"
-        print(f"🔍 Comparing {face_id}...")
-        
-        matches = compare_embeddings(embedding, collection_name="registered_faces")
-        
-        if matches:
-            matched_entry = matches[0]  # Get the top match
-            matched_name, similarity = matched_entry
+from src.detection.face_detector import detect_faces
+from src.recognition.recognizer_utils import extract_embeddings, compare_faces_cosine
+from src.recognition.db_manager import get_all_embeddings, store_embedding
 
-            print(f"🚨 Match Found! {face_id} matches registered person: {matched_name} (Similarity: {similarity:.2f})")
-            print(f"🔍 Full Matched Object: {matched_entry}")  # Print the entire matched object for debugging
-            
-            # Retrieve and show the registered person's image with bounding box
-            for entry in registered_faces:
-                if entry["name"] == matched_name:
-                    registered_image_path = entry["image_path"]
-                    face_bbox = entry.get("bbox")  # Get bounding box (x, y, w, h)
-                    
-                    if os.path.exists(registered_image_path):
-                        registered_image = cv2.imread(registered_image_path)
-                        
-                        if face_bbox:
-                            x, y, w, h = face_bbox
-                            cv2.rectangle(registered_image, (x, y), (x + w, y + h), (0, 255, 0), 3)
-                        
-                        cv2.imshow(f"Matched Registered Person: {matched_name}", registered_image)
-                    break
-        else:
-            print(f"⚠️ {face_id} does not match any registered person.")
-    
-    cv2.imshow("Detected Faces in Missing Person Image", image_with_faces)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+def identify_missing_person(image_np):
+    """
+    Identifies a missing person from an uploaded image by comparing face embeddings 
+    with those stored in the 'missing_persons' collection.
 
-# Run the identification
-# missing_person_image = r"C:\Users\APARNA SAMAL\Desktop\DeepSight\deepsight-missing-person-tracker\data\test_image.jpg"
-# identify_missing_person(missing_person_image)
+    Args:
+        image_np (numpy.ndarray): The uploaded image as a NumPy array.
+
+    Returns:
+        dict: A dictionary containing the result of the identification process.
+              - If a match is found: {"message": "Match found: [name]", "image_base64": [image_base64]}
+              - If no match is found: {"message": "No match found. Added to missing persons: [name]"}
+              - If an error occurs: {"error": "Error during identification", "details": [error_details]}
+    """
+    try:
+        image_with_rects, faces = detect_faces(image_np.copy())
+        if not faces:
+            return {"message": "No faces detected."}
+
+        embeddings = [extract_embeddings(face) for face in faces]
+        if not embeddings:
+            return {"message": "No valid face embeddings."}
+
+        missing_persons_embeddings = get_all_embeddings("missing_persons")
+
+        for embedding in embeddings:
+            match = compare_faces_cosine(embedding, missing_persons_embeddings)
+            if match:
+                return {"message": f"Match found: {match['name']}", "image_base64": match['image_base64']}
+
+        # No match found, add to missing_persons
+        new_person_name = "Unknown_Missing_Person"  # Or generate a unique name
+        store_embedding(new_person_name, embeddings[0], image_np, "missing_persons")
+        return {"message": f"No match found. Added to missing persons: {new_person_name}"}
+
+    except Exception as e:
+        return {"error": "Error during identification", "details": str(e)}

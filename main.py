@@ -6,13 +6,14 @@ import logging
 from src.recognition.db_manager import convert_image_to_base64, store_embedding
 from src.detection.face_detector import detect_faces
 from src.recognition.recognizer_utils import extract_embeddings
+from src.recognition.identify_missing_person import identify_missing_person  # Import the new function
 from fastapi.middleware.cors import CORSMiddleware
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 print("✅ Starting FastAPI...")
-print(f"OpenCV version: {cv2.__version__}") 
+print(f"OpenCV version: {cv2.__version__}")
 app = FastAPI()
 
 app.add_middleware(
@@ -36,13 +37,13 @@ async def startup_event():
     routes = [route.path for route in app.routes]
     logger.debug(f"Available routes: {routes}")
 
-@app.post("/add_missing_person") 
+@app.post("/add_missing_person")
 async def add_missing_person_api(
-    image: UploadFile = File(...), 
+    image: UploadFile = File(...),
     missing_person_name: str = Form(...)
 ):
     print(f"Received image: {image.filename}, Name: {missing_person_name}")
-    
+
     try:
         # Read and decode image file
         contents = await image.read()
@@ -88,6 +89,23 @@ async def add_missing_person_api(
 
     except Exception as e:
         print(f"❌ Error: {str(e)}")
+        return {"error": "Internal server error", "details": str(e)}
+
+@app.post("/identify_missing_person")
+async def identify_missing_person_api(image: UploadFile = File(...)):
+    print(f"Received image for identification: {image.filename}")
+    try:
+        contents = await image.read()
+        nparr = np.frombuffer(contents, np.uint8)
+        image_np = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if image_np is None:
+            return {"error": "Invalid image format."}
+
+        match_result = identify_missing_person(image_np) #use imported function
+        return match_result
+
+    except Exception as e:
         return {"error": "Internal server error", "details": str(e)}
 
 @app.get("/")
