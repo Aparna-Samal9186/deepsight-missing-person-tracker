@@ -1,49 +1,96 @@
+# face_recognizer.py
 import cv2
 import numpy as np
-from deepface import DeepFace
+import dlib
+from src.recognition.db_manager import get_all_embeddings, find_closest_match
+from src.recognition.recognizer_utils import extract_embeddings, compare_faces
 
-from scipy.spatial.distance import cosine
-from recognition.db_manager import get_all_embeddings # Load stored embeddings
+# Load face detector
+detector = dlib.get_frontal_face_detector()
 
-def extract_embeddings(faces):
+def recognize_face(input_type="image", image_path=None):
     """
-    Extracts embeddings for each detected face.
+    Recognizes faces from an image or webcam.
 
     Args:
-    - faces (list of numpy arrays): Cropped face images.
-
+    - input_type (str): "image" for static images, "webcam" for real-time webcam capture.
+    - image_path (str, optional): Path to the image (only used if input_type is "image").
+    
     Returns:
-    - embeddings_list (list): List of face embeddings.
+    - None
     """
-    embeddings_list = []
-
-    for i, face in enumerate(faces):
-        try:
-            # Extract embedding
-            embedding = DeepFace.represent(face, model_name="Facenet", enforce_detection=False)[0]["embedding"]
-            embeddings_list.append(embedding)
-        except Exception as e:
-            print(f"⚠️ Error extracting embedding for face {i+1}: {e}")
-
-    return embeddings_list
-
-
-def compare_embeddings(new_embedding, threshold=0.7, collection_name="registered_faces"):
-    """
-    Compares a new embedding against stored embeddings in MongoDB.
-    """
-    stored_faces = get_all_embeddings(collection_name)
-
-    # print('new_embedding inside face_recognizer campare_embeddings:',new_embedding)
-    # print('stored_faces:',stored_faces)
-    matches = []
     
-    for entry in stored_faces:
-        name, stored_embedding = entry["name"], entry["embedding"]
-        similarity = 1 - cosine(new_embedding, stored_embedding)
+    if input_type == "image" and image_path:
+        image = cv2.imread(image_path)
+        if image is None:
+            print("⚠️ Error: Could not load image.")
+            return
+    else:
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            print("⚠️ Error: Could not open webcam.")
+            return
         
-        if similarity >= threshold:
-            matches.append((name, similarity))
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("⚠️ Error: Could not read frame.")
+                break
+            
+            # Detect faces in the frame
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = detector(gray)
+            
+            for face in faces:
+                x, y, w, h = face.left(), face.top(), face.width(), face.height()
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            
+            cv2.imshow("Webcam - Press 'c' to capture, 'q' to quit", frame)
+            key = cv2.waitKey(1) & 0xFF
+            
+            if key == ord('c'):  # Capture frame
+                image = frame.copy()
+                break
+            elif key == ord('q'):  # Quit
+                cap.release()
+                cv2.destroyAllWindows()
+                return
+        
+        cap.release()
+        cv2.destroyAllWindows()
     
-    matches.sort(key=lambda x: x[1], reverse=True)  # Sort by similarity score
-    return matches
+    # Process detected faces
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    faces = detector(gray)
+    
+    if len(faces) == 0:
+        print("⚠️ No faces detected.")
+        return
+    
+    stored_embeddings = get_all_embeddings()
+    
+    for face in faces:
+        x, y, w, h = face.left(), face.top(), face.width(), face.height()
+        cropped_face = image[y:y+h, x:x+w]
+        
+        # Extract embedding
+        embedding = extract_embeddings(cropped_face)
+        
+        # Find closest match in the database
+        match = find_closest_match(embedding, "registered_faces")
+        
+        label = "Unknown" if match is None else match["name"]
+        
+        # Draw label and bounding box
+        cv2.putText(image, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    
+    # Display the results
+    cv2.imshow("Recognition Result", image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+# Example usage:
+# recognize_face("image", "path/to/image.jpg")
+# recognize_face("webcam")
+

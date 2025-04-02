@@ -1,57 +1,88 @@
+# face_detector.py
+
 import cv2
+import dlib
 import numpy as np
-from mtcnn import MTCNN
+import mediapipe as mp
+from src.recognition.recognizer_utils import extract_embeddings, compare_faces
+from src.recognition.db_manager import get_all_embeddings
 
-# Initialize MTCNN detector
-detector = MTCNN()
+# Load face detector
+# detector = dlib.get_frontal_face_detector()
 
-def detect_faces(image_path):
-    """
-    Detects multiple faces in an image, returns the image with bounding boxes and cropped face regions.
+mp_face_detection = mp.solutions.face_detection
+mp_drawing = mp.solutions.drawing_utils
+face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.5)
 
-    Args:
-    - image_path (str): Path to the input image.
+# def process_frame(image):
+#     """
+#     Detect faces and recognize them in a given image.
 
-    Returns:
-    - image_with_boxes (numpy array): Image with bounding boxes drawn.
-    - faces (list of numpy arrays): List of cropped face images.
-    """
-    # Load image
-    image = cv2.imread(image_path)
+#     Args:
+#     - image (numpy.ndarray): Input image.
 
-    if image is None:
-        print("❌ Error: Unable to load image!")
+#     Returns:
+#     - image (numpy.ndarray): Image with bounding boxes and labels.
+#     - results (list): List of detected face information.
+#     """
+#     if image is None or image.size == 0:
+#         return None, {"error": "Invalid image provided."}
+
+#     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+#     faces = detector(gray)
+#     stored_embeddings = get_all_embeddings()
+#     results = []
+    
+#     for face in faces:
+#         x, y, w, h = face.left(), face.top(), face.width(), face.height()
+
+#         # Ensure valid face cropping
+#         if y < 0 or x < 0 or y+h > image.shape[0] or x+w > image.shape[1]:
+#             continue
+
+#         cropped_face = image[y:y+h, x:x+w]
+#         embedding = extract_embeddings(cropped_face)
+
+#         match = compare_faces(embedding, stored_embeddings)
+#         label = "Unknown" if match is None else match
+#         results.append({"label": label, "coordinates": [x, y, w, h]})
+
+#         cv2.putText(image, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+#         cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+#     return image, results
+
+def detect_faces(image):
+    if image is None or image.size == 0:
+        print("❌ Error: Empty image received in detect_faces.")
         return None, []
 
-    # Convert image to RGB (MTCNN expects RGB)
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    print(f"✅ detect_faces received image with shape: {image.shape}, dtype: {image.dtype}")
 
-    # Detect faces
-    detections = detector.detect_faces(image_rgb)
+    try:
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        results = face_detection.process(image_rgb)
 
-    faces = []
+        faces = []
+        if results.detections:
+            for detection in results.detections:
+                bboxC = detection.location_data.relative_bounding_box
+                ih, iw, _ = image.shape
+                bbox = int(bboxC.xmin * iw), int(bboxC.ymin * ih), int(bboxC.width * iw), int(bboxC.height * ih)
+                x, y, w, h = bbox
 
-    for i, detection in enumerate(detections):
-        x, y, width, height = detection['box']
+                if y < 0 or x < 0 or y + h > image.shape[0] or x + w > image.shape[1]:
+                    continue
 
-        # Ensure valid bounding box dimensions
-        x, y = max(0, x), max(0, y)
-        width, height = max(1, width), max(1, height)
+                cropped_face = image[y:y+h, x:x+w]
+                faces.append(cropped_face)
+                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-        # Extract face region
-        face_rgb = image_rgb[y:y + height, x:x + width]
+        if results.detections:
+            for detection in results.detections:
+                mp_drawing.draw_detection(image, detection) # add landmarks
+        return image, faces
 
-        # Convert face back to BGR (DeepFace expects BGR)
-        face_bgr = cv2.cvtColor(face_rgb, cv2.COLOR_RGB2BGR)
-
-        # Resize face to match model input size
-        face_bgr = cv2.resize(face_bgr, (160, 160))
-
-        faces.append(face_bgr)
-
-        # Draw bounding box on original image
-        cv2.rectangle(image, (x, y), (x + width, y + height), (0, 255, 0), 3)
-        cv2.putText(image, f"Face {i+1}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-    print(f"✅ Detected {len(faces)} faces.")
-    return image, faces
+    except Exception as e:
+        print(f"❌ MediaPipe Error: {str(e)}")
+        return None, []
