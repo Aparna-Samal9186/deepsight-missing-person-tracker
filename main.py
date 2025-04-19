@@ -3,11 +3,12 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form
 import logging
-from src.recognition.db_manager import convert_image_to_base64, store_embedding, verify_user, create_user
+from src.recognition.db_manager import convert_image_to_base64, store_embedding, verify_user, create_user, get_all_missing_persons
 from src.detection.face_detector import detect_faces
 from src.recognition.recognizer_utils import extract_embeddings
 from src.recognition.identify_missing_person import identify_missing_person  # Import the new function
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -140,6 +141,11 @@ async def identify_missing_person_api(
 
     except Exception as e:
         return {"error": "Internal server error", "details": str(e)}
+
+@app.get("/missing-persons")
+def fetch_missing_persons():
+    persons = get_all_missing_persons()
+    return JSONResponse(content=persons)
 
 @app.get("/")
 async def root():

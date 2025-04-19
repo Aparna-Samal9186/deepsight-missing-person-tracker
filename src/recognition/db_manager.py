@@ -4,6 +4,7 @@ import cv2
 import base64
 import numpy as np
 import bcrypt
+from bson import ObjectId
 from typing import Optional, Union, Dict, List
 
 # Connect to MongoDB
@@ -98,6 +99,18 @@ def get_all_embeddings(collection_name: str = "registered_faces") -> List[Dict]:
     if not documents:
         print(f"⚠️ No embeddings found in {collection_name}.")
     return documents
+
+# Serialize MongoDB documents for JSON response
+def serialize_person(person):
+    person["_id"] = str(person["_id"])
+    if "timestamp" in person and person["timestamp"]:
+        person["timestamp"] = person["timestamp"].isoformat()  # convert datetime to string
+    return person
+
+def get_all_missing_persons():
+    persons = list(missing_persons.find())
+    return [serialize_person(p) for p in persons]
+
 
 # ------------------- Matching Logic -------------------
 
