@@ -26,4 +26,4 @@ def compare_faces_cosine(embedding, stored_embeddings):
                 highest_similarity = similarity
                 match = stored_embedding
 
-    return match if highest_similarity > 0.8 else None  # Threshold for match
+    return match if highest_similarity > 0.6 else None  # Threshold for match

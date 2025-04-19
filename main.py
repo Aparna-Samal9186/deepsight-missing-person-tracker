@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form
 import logging
-from src.recognition.db_manager import convert_image_to_base64, store_embedding
+from src.recognition.db_manager import convert_image_to_base64, store_embedding, verify_user, create_user
 from src.detection.face_detector import detect_faces
 from src.recognition.recognizer_utils import extract_embeddings
 from src.recognition.identify_missing_person import identify_missing_person  # Import the new function
@@ -90,10 +90,35 @@ async def add_missing_person_api(
     except Exception as e:
         print(f"❌ Error: {str(e)}")
         return {"error": "Internal server error", "details": str(e)}
+    
+
+@app.post("/signup")
+async def signup_api(
+    username: str = Form(...),
+    password: str = Form(...)
+):
+    result = create_user(username, password)
+    return result
+
+@app.post("/login")
+async def login_api(
+    username: str = Form(...),
+    password: str = Form(...)
+):
+    result = verify_user(username, password)
+    return result
+
 
 @app.post("/identify_missing_person")
-async def identify_missing_person_api(image: UploadFile = File(...)):
-    print(f"Received image for identification: {image.filename}")
+async def identify_missing_person_api(
+    name: str = Form(...),
+    age: int = Form(None),
+    lost_location: str = Form(...),
+    description: str = Form(None),
+    contact: str = Form(...),
+    image: UploadFile = File(...)
+):
+    print(f"Received report for: {name}, lost at: {lost_location}, Contact: {contact}, Image: {image.filename}")
     try:
         contents = await image.read()
         nparr = np.frombuffer(contents, np.uint8)
@@ -102,7 +127,15 @@ async def identify_missing_person_api(image: UploadFile = File(...)):
         if image_np is None:
             return {"error": "Invalid image format."}
 
-        match_result = identify_missing_person(image_np) #use imported function
+        # Now you have access to:
+        # - name: str
+        # - age: int (can be None)
+        # - lost_location: str
+        # - description: str (can be None)
+        # - contact: str
+        # - image: UploadFile (with image.filename, await image.read(), etc.)
+
+        match_result = identify_missing_person(image_np, name=name, age=age, lost_location=lost_location, description=description, contact=contact) # Pass the additional data to your identification function
         return match_result
 
     except Exception as e:

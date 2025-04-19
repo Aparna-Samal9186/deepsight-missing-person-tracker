@@ -1,9 +1,10 @@
-# db_manager.py
 from pymongo import MongoClient
 import datetime
 import cv2
 import base64
 import numpy as np
+import bcrypt
+from typing import Optional, Union, Dict, List
 
 # Connect to MongoDB
 client = MongoClient("mongodb://localhost:27017/")
@@ -12,106 +13,136 @@ db = client["deepsight_db"]
 # Collections
 registered_faces = db["registered_faces"]
 missing_persons = db["missing_persons"]
+users = db["users"]
 
-def convert_image_to_base64(image_np):
-    """Converts a NumPy image array to Base64 string."""
+# ------------------- Helper Functions -------------------
+
+def convert_image_to_base64(image_np: np.ndarray) -> str:
+    """Convert a NumPy image array to a base64-encoded JPEG string."""
     _, buffer = cv2.imencode(".jpg", image_np)
     return base64.b64encode(buffer).decode("utf-8")
 
-def get_next_face_id(collection_name="registered_faces"):
-    """Generates a unique face ID."""
+def get_next_face_id(collection_name: str = "registered_faces") -> str:
+    """Generate the next sequential face ID based on the collection."""
     collection = registered_faces if collection_name == "registered_faces" else missing_persons
-    last_face = collection.find_one({}, sort=[("_id", -1)])
+    last_face = collection.find_one(sort=[("_id", -1)])
 
     prefix = "registered_face_" if collection_name == "registered_faces" else "missing_face_"
-
+    
     if last_face and last_face.get("_id", "").startswith(prefix):
         try:
             last_id = int(last_face["_id"].split("_")[-1])
-            new_id = last_id + 1
-        except ValueError:
-            new_id = 1
-    else:
-        new_id = 1
+            return f"{prefix}{last_id + 1}"
+        except (ValueError, IndexError):
+            pass
+    
+    return f"{prefix}1"
 
-    return f"{prefix}{new_id}"
+# ------------------- Embedding Storage & Retrieval -------------------
 
-def store_embedding(name, embedding, image_np, collection_name):
-    """Stores a face embedding in MongoDB."""
-    collection = missing_persons if collection_name == "missing_persons" else registered_faces
-
-    # Ensure embedding is not None or empty
+def store_embedding(
+    name: str,
+    embedding: Union[np.ndarray, list],
+    image_np: np.ndarray,
+    collection_name: str,
+    age: Optional[int] = None,
+    lost_location: Optional[str] = None,
+    description: Optional[str] = None,
+    contact: Optional[str] = None
+) -> Optional[str]:
+    """Store face embedding with additional metadata."""
     if embedding is None or len(embedding) == 0:
         print(f"⚠️ No valid embeddings found for {name}. Skipping storage.")
         return None
 
+    collection = missing_persons if collection_name == "missing_persons" else registered_faces
     face_id = get_next_face_id(collection_name)
     image_base64 = convert_image_to_base64(image_np)
 
     document = {
         "_id": face_id,
         "name": name,
-        "embedding": embedding.tolist() if isinstance(embedding, np.ndarray) else embedding,  # Ensure embedding is stored as a list
+        "embedding": embedding.tolist() if isinstance(embedding, np.ndarray) else embedding,
         "image_base64": image_base64,
-        "timestamp": datetime.datetime.utcnow()
+        "timestamp": datetime.datetime.utcnow(),
+        "age": age,
+        "lost_location": lost_location,
+        "description": description,
+        "contact": contact
     }
 
     try:
-        insert_result = collection.insert_one(document)
-        if insert_result.inserted_id:
-            print(f"✅ Stored embedding for {name} in {collection_name} with ID: {insert_result.inserted_id}")
+        result = collection.insert_one(document)
+        if result.inserted_id:
+            print(f"✅ Stored embedding for {name} in {collection_name} with ID: {face_id}")
             return face_id
-        else:
-            print(f"⚠️ MongoDB did not return an inserted ID for {name}.")
     except Exception as e:
         print(f"❌ Error storing embedding for {name}: {e}")
     
     return None
 
-def get_all_embeddings(collection_name="registered_faces"):
-    """Retrieves all face embeddings."""
+def get_all_embeddings(collection_name: str = "registered_faces") -> List[Dict]:
+    """Retrieve all embeddings with metadata."""
     collection = registered_faces if collection_name == "registered_faces" else missing_persons
-    embeddings = list(collection.find({}, {"_id": 1, "name": 1, "embedding": 1, "image_base64": 1}))
+    documents = list(collection.find({}, {
+        "_id": 1,
+        "name": 1,
+        "embedding": 1,
+        "image_base64": 1,
+        "age": 1,
+        "lost_location": 1,
+        "description": 1,
+        "contact": 1
+    }))
 
-    if not embeddings:
+    if not documents:
         print(f"⚠️ No embeddings found in {collection_name}.")
-    
-    return embeddings
+    return documents
 
-def cosine_similarity(embedding1, embedding2):
-    """Computes cosine similarity between two embeddings."""
-    e1 = np.array(embedding1)
-    e2 = np.array(embedding2)
+# ------------------- Matching Logic -------------------
 
-    # Avoid division by zero
-    norm_e1 = np.linalg.norm(e1)
-    norm_e2 = np.linalg.norm(e2)
+def cosine_similarity(embedding1: list, embedding2: list) -> float:
+    """Compute cosine similarity between two embeddings."""
+    e1, e2 = np.array(embedding1), np.array(embedding2)
+    norm_e1, norm_e2 = np.linalg.norm(e1), np.linalg.norm(e2)
 
     if norm_e1 == 0 or norm_e2 == 0:
-        return 0  # Return 0 if either vector is zero-length
-
+        return 0.0
     return np.dot(e1, e2) / (norm_e1 * norm_e2)
 
-def find_closest_match(embedding, collection_name="registered_faces"):
-    """Finds the closest face match based on cosine similarity."""
-    collection = registered_faces if collection_name == "registered_faces" else missing_persons
-    all_embeddings = get_all_embeddings(collection_name)
+def find_closest_match(embedding: list, collection_name: str = "registered_faces") -> Optional[Dict]:
+    """Find the most similar face using cosine similarity."""
+    all_entries = get_all_embeddings(collection_name)
+    best_match = None
+    best_score = -1
 
-    if not all_embeddings:
-        return None  # Return None if the collection is empty
-
-    closest_match = None
-    highest_similarity = -1  # Cosine similarity ranges from -1 to 1
-
-    for entry in all_embeddings:
+    for entry in all_entries:
         stored_embedding = entry.get("embedding")
         if stored_embedding:
-            similarity = cosine_similarity(embedding, stored_embedding)
-            if similarity > highest_similarity:
-                highest_similarity = similarity
-                closest_match = entry
+            score = cosine_similarity(embedding, stored_embedding)
+            if score > best_score:
+                best_score = score
+                best_match = entry
 
-    if highest_similarity > 0.8:
-        return closest_match
-    else:
-        return None  # Return None if no match is found
+    return best_match if best_score > 0.8 else None
+
+# ------------------- User Management -------------------
+
+def create_user(username: str, password: str) -> Dict[str, str]:
+    """Register a new user with hashed password."""
+    if users.find_one({"username": username}):
+        return {"error": "User already exists."}
+    
+    hashed_pw = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+    users.insert_one({"username": username, "password": hashed_pw})
+    return {"message": "User registered successfully!"}
+
+def verify_user(username: str, password: str) -> Dict[str, str]:
+    """Verify user login credentials."""
+    user = users.find_one({"username": username})
+    if not user:
+        return {"error": "User not found."}
+    
+    if bcrypt.checkpw(password.encode("utf-8"), user["password"]):
+        return {"message": "Login successful!"}
+    return {"error": "Invalid credentials."}
