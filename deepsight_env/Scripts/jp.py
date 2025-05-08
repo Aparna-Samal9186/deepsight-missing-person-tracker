@@ -1,4 +1,4 @@
-#!C:\Users\APARNA SAMAL\Desktop\DeepSight\deepsight-missing-person-tracker\deepsight_env\Scripts\python.exe
+#!C:\Users\APARNA SAMAL\Desktop\DeepSight\deepsight-missing-person-tracker\deepsight-backend\deepsight_env\Scripts\python.exe
 
 import sys
 import json
